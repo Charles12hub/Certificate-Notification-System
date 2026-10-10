@@ -2692,12 +2692,42 @@ function parseCSV(text){
 /* Headerless positional parser — PHOTO_ANSWER_KEY.csv has no header row:
    every line is a data row of (folder, file, id, answer). */
 function photoRowsToObjects(rows){
-  return rows.map(cols=>({
-    folder: cols[0] || '',
-    file: cols[1] || '',
-    id: cols[2] || '',
-    answer: cols[3] || ''
-  }));
+  if(!rows || !rows.length) return [];
+
+  // PHOTO_ANSWER_KEY may be either:
+  //   A) headed 3-column Excel/CSV: Folder | Image File | Answer Key
+  //   B) legacy headerless 4-column: folder | file | id | answer
+  // Detect the headed format instead of accidentally treating its header as an image row.
+  const norm = v => String(v || '').trim().toLowerCase().replace(/[\s_]+/g, ' ');
+  const first = rows[0].map(norm);
+  const hasHeader = first.some(v => ['folder','image file','file','filename','answer key','answer','id','image id'].includes(v));
+
+  if(hasHeader){
+    const headers = first;
+    const findCol = names => headers.findIndex(h => names.includes(h));
+    const folderCol = findCol(['folder','folder name']);
+    const fileCol = findCol(['image file','file','filename','image filename']);
+    const idCol = findCol(['id','image id']);
+    const answerCol = findCol(['answer key','answer','correct answer','defect code']);
+
+    return rows.slice(1).map(cols => {
+      const folder = folderCol >= 0 ? String(cols[folderCol] || '').trim() : '';
+      const file = fileCol >= 0 ? String(cols[fileCol] || '').trim() : '';
+      const answer = answerCol >= 0 ? String(cols[answerCol] || '').trim() : '';
+      const derivedId = file.replace(/\.[^.]+$/, '');
+      const id = idCol >= 0 ? String(cols[idCol] || '').trim() : derivedId;
+      return { folder, file, id, answer };
+    }).filter(r => r.folder && r.file);
+  }
+
+  return rows.map(cols => {
+    const folder = String(cols[0] || '').trim();
+    const file = String(cols[1] || '').trim();
+    const fourColumn = cols.length >= 4;
+    const id = fourColumn ? String(cols[2] || '').trim() : file.replace(/\.[^.]+$/, '');
+    const answer = String(cols[fourColumn ? 3 : 2] || '').trim();
+    return { folder, file, id, answer };
+  }).filter(r => r.folder && r.file);
 }
 function parsePhotoCSV(text){
   return photoRowsToObjects(csvRows(text));
@@ -3754,19 +3784,41 @@ function resetImageZoom(imgId){
 }
 
 function loadExamImage(imgEl, fallbackEl, folder, fileValue){
-  const hasExt = /\.[a-z0-9]+$/i.test(fileValue);
-  const candidates = hasExt ? [fileValue] : IMAGE_EXTENSIONS.map(ext => fileValue + '.' + ext);
+  const cleanFolder = String(folder || '').trim().replace(/^\/+|\/+$/g, '');
+  const cleanFile = String(fileValue || '').trim().replace(/^\/+/, '');
+  const hasExt = /\.[a-z0-9]+$/i.test(cleanFile);
+  const candidates = hasExt ? [cleanFile] : IMAGE_EXTENSIONS.map(ext => cleanFile + '.' + ext);
+
+  // Every render receives a unique request token. A late load/error event from the
+  // previous question is ignored, so it cannot reveal the wrong image in this frame.
+  const requestToken = (Number(imgEl.dataset.loadToken || 0) + 1);
+  imgEl.dataset.loadToken = String(requestToken);
+  imgEl.onload = null;
+  imgEl.onerror = null;
+  imgEl.removeAttribute('src');
+  imgEl.classList.add('hidden');
+  fallbackEl.classList.remove('hidden');
+
   let i = 0;
   function tryNext(){
+    if(Number(imgEl.dataset.loadToken) !== requestToken) return;
     if(i >= candidates.length){
       imgEl.classList.add('hidden');
       fallbackEl.classList.remove('hidden');
       return;
     }
-    const path = `EXAM/${folder}/${candidates[i]}`;
-    i++;
-    imgEl.onload = ()=>{ imgEl.classList.remove('hidden'); fallbackEl.classList.add('hidden'); };
-    imgEl.onerror = tryNext;
+    const candidate = candidates[i++];
+    const path = `EXAM/${cleanFolder}/${candidate}`;
+    imgEl.onload = ()=>{
+      if(Number(imgEl.dataset.loadToken) !== requestToken) return;
+      imgEl.dataset.loadedPath = path;
+      imgEl.classList.remove('hidden');
+      fallbackEl.classList.add('hidden');
+    };
+    imgEl.onerror = ()=>{
+      if(Number(imgEl.dataset.loadToken) !== requestToken) return;
+      tryNext();
+    };
     imgEl.src = path;
   }
   tryNext();
