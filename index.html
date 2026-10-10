@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3863,7 +3862,16 @@ function buildExamUnits(){
       const cfg = state.settings.photoFolders[folder];
       const enabled = cfg ? cfg.enabled : true;
       if(!enabled) return;
-      const all = photoAnswerKey.filter(r=>r.folder === folder);
+      // Keep every photo as one intact record: folder + filename + answer.
+      // Natural numeric ordering prevents 1,10,11...2 ordering from being used
+      // anywhere before the records are randomized for the examination.
+      const all = photoAnswerKey
+        .filter(r => r.folder === folder)
+        .map(r => ({ ...r }))
+        .sort((a, b) => String(a.file).localeCompare(String(b.file), undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        }));
       const limit = cfg && cfg.questions ? Math.min(cfg.questions, all.length) : all.length;
       const qs = shuffleArray(all).slice(0, limit);
       if(qs.length){
@@ -3946,14 +3954,20 @@ function renderExamQuestion(){
 
     const imgFrame = document.getElementById('ex-image-frame');
     imgFrame.classList.remove('hidden');
-    const displayPath = `EXAM/${unit.label}/${q.file}`;
     const img = document.getElementById('ex-img');
     const fallback = document.getElementById('ex-img-fallback');
-    document.getElementById('ex-img-fname').textContent = displayPath;
-    document.getElementById('ex-img-filetag').textContent = q.file;
+    // One source of truth: the exact same Excel record supplies both the
+    // visible filename and the image path. Never use question position as a filename.
+    const exactFolder = String(q.folder || '').trim();
+    const exactFile = String(q.file || '').trim();
+    const exactPath = `EXAM/${exactFolder}/${exactFile}`;
+    document.getElementById('ex-img-fname').textContent = exactPath;
+    document.getElementById('ex-img-filetag').textContent = exactFile;
+    img.dataset.expectedFile = exactFile;
+    img.dataset.expectedFolder = exactFolder;
     img.classList.add('hidden');
     fallback.classList.remove('hidden');
-    loadExamImage(img, fallback, unit.label, q.file);
+    loadExamImage(img, fallback, exactFolder, exactFile);
     resetImageZoom('ex-img');
 
     const ansKey = unit.key + '::' + answerKeyFor(unit, q);
@@ -4108,7 +4122,7 @@ function scoreAndShowResults(){
       if(isCorrect) correct++;
       else wrongRows.push({
         unitKey: unit.key, unitLabel: unit.groupLabel + ' · ' + unit.label, kind: unit.kind,
-        folder: unit.label, file: q.file, qnum: i+1,
+        folder: q.folder, file: q.file, qnum: i+1,
         given: state.exam.answers[ansKey] || '(blank)', correct: q.answer
       });
     });
