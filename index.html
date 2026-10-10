@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Visual Inspector Qualification System</title>
 <script>
-  // Apply saved theme before first paint, so there's no flash of the wrong mode.
+  // Apply saved theme/accent before first paint, so there's no flash of the wrong mode/color.
   try{
     if(localStorage.getItem('viqs-theme') === 'light') document.documentElement.setAttribute('data-theme','light');
-  } catch(e){ /* localStorage unavailable — defaults to dark */ }
+    const savedAccent = localStorage.getItem('viqs-accent');
+    if(savedAccent === 'green' || savedAccent === 'purple') document.documentElement.setAttribute('data-accent', savedAccent);
+  } catch(e){ /* localStorage unavailable — defaults to dark + blue */ }
 </script>
 <style>
   :root{
@@ -87,6 +89,52 @@
     --blue:#3B82F6; --blue-dark:#8FC1FF; --blue-deep:#EAF2FF; --blue-light:#233F70; --blue-mist:#1F3055;
     --text:#E7EEFC; --text-soft:#A9BAD9; --text-faint:#7488AC;
     background:var(--bg);
+  }
+
+  /* ---- Accent color themes: Green / Purple (Blue is the default, defined above) ----
+     Reuses the existing --blue* variable names everywhere (so every component that
+     already references var(--blue) etc. picks up the new color with no other
+     changes needed) — only the VALUES change per accent. */
+  html[data-accent="green"]{
+    --blue:#10B981; --blue-dark:#6EE7B7; --blue-deep:#EAFBF2; --blue-light:#1C3B2E; --blue-mist:#163327;
+    --glow-sm:0 0 0 1px rgba(16,185,129,0.25), 0 0 16px rgba(16,185,129,0.24);
+    --glow-md:0 0 0 1px rgba(16,185,129,0.32), 0 0 28px rgba(16,185,129,0.36);
+  }
+  html[data-theme="light"][data-accent="green"]{
+    --blue:#059669; --blue-dark:#047857; --blue-deep:#052E1F; --blue-light:#D1FAE5; --blue-mist:#ECFDF5;
+    --glow-sm:0 0 0 1px rgba(5,150,105,0.20), 0 0 14px rgba(5,150,105,0.14);
+    --glow-md:0 0 0 1px rgba(5,150,105,0.26), 0 0 22px rgba(5,150,105,0.20);
+  }
+  html[data-accent="purple"]{
+    --blue:#8B5CF6; --blue-dark:#C4B5FD; --blue-deep:#F3EEFF; --blue-light:#2E2755; --blue-mist:#241F42;
+    --glow-sm:0 0 0 1px rgba(139,92,246,0.25), 0 0 16px rgba(139,92,246,0.24);
+    --glow-md:0 0 0 1px rgba(139,92,246,0.32), 0 0 28px rgba(139,92,246,0.36);
+  }
+  html[data-theme="light"][data-accent="purple"]{
+    --blue:#7C3AED; --blue-dark:#6D28D9; --blue-deep:#1E1033; --blue-light:#EDE5FF; --blue-mist:#F5F1FF;
+    --glow-sm:0 0 0 1px rgba(124,58,237,0.20), 0 0 14px rgba(124,58,237,0.14);
+    --glow-md:0 0 0 1px rgba(124,58,237,0.26), 0 0 22px rgba(124,58,237,0.20);
+  }
+  html[data-accent="green"] body{
+    background: radial-gradient(1100px 600px at 85% -10%, rgba(16,185,129,0.07), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(16,185,129,0.05), transparent 55%), var(--bg);
+  }
+  html[data-accent="purple"] body{
+    background: radial-gradient(1100px 600px at 85% -10%, rgba(139,92,246,0.07), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(139,92,246,0.05), transparent 55%), var(--bg);
+  }
+  .accent-swatch-row{display:flex;align-items:center;gap:10px;padding:8px 12px;}
+  .accent-swatch{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;
+    transition:border-color .15s ease, transform .15s ease;flex-shrink:0;}
+  .accent-swatch:hover{transform:scale(1.1);}
+  .accent-swatch.active{border-color:var(--text);}
+  .accent-swatch[data-accent-swatch="blue"]{background:#3B82F6;}
+  .accent-swatch[data-accent-swatch="green"]{background:#10B981;}
+  .accent-swatch[data-accent-swatch="purple"]{background:#8B5CF6;}
+  .accent-swatch-label{font-size:11px;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
+  /* Login screen stays locked to blue regardless of accent color too */
+  html[data-accent="green"] #view-login, html[data-accent="purple"] #view-login{
+    --blue:#3B82F6; --blue-dark:#8FC1FF; --blue-deep:#EAF2FF; --blue-light:#233F70; --blue-mist:#1F3055;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
@@ -860,6 +908,13 @@
           <span id="theme-toggle-label">Dark Mode</span>
         </span>
         <span class="theme-switch-mini"><span class="knob"></span></span>
+      </div>
+      <div class="accent-swatch-row">
+        <span class="accent-swatch-label">Color</span>
+        <div style="flex:1;"></div>
+        <span class="accent-swatch" data-accent-swatch="blue" title="Blue"></span>
+        <span class="accent-swatch" data-accent-swatch="green" title="Green"></span>
+        <span class="accent-swatch" data-accent-swatch="purple" title="Purple"></span>
       </div>
       <div class="nav-item nav-logout" id="nav-logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Logout</div>
     </nav>
@@ -1832,14 +1887,7 @@
 <script>
 /* ===================== STATE ===================== */
 const ADMIN_ACCOUNTS = [
-   { empNumber: "1029383", name: "Charlie Guatno", password: "1029383TDK" },
-  { empNumber: "1028781", name: "Aisa-J Magana", password: "1028781TDK" },
-  { empNumber: "1026814", name: "Angelica Arguelles", password: "1026814TDK" },
-  { empNumber: "1029248", name: "Gabriel Adih Abergos", password: "1029248TDK" },
-  { empNumber: "1025109", name: "Marjielyn Ternate", password: "1025109TDK" },
-  { empNumber: "1013404", name: "Precielene Capacio", password: "1013404TDK" },
-  { empNumber: "1029095", name: "Gaudine Alfred Flor", password: "1029095TDK" },
-
+  { empNumber: "1029383", name: "Charlie Guatno", password: "1029383TDK" }
 ];
 
 // Default answer keys used until Admin uploads real CSVs
@@ -3001,6 +3049,27 @@ document.getElementById('theme-toggle-btn').addEventListener('click', ()=>{
   applyThemeUI();
 });
 applyThemeUI();
+
+function applyAccentUI(){
+  const current = document.documentElement.getAttribute('data-accent') || 'blue';
+  document.querySelectorAll('.accent-swatch').forEach(sw=>{
+    sw.classList.toggle('active', sw.dataset.accentSwatch === current);
+  });
+}
+document.querySelectorAll('.accent-swatch').forEach(sw=>{
+  sw.addEventListener('click', ()=>{
+    const choice = sw.dataset.accentSwatch;
+    if(choice === 'blue'){
+      document.documentElement.removeAttribute('data-accent');
+      try{ localStorage.setItem('viqs-accent', 'blue'); } catch(e){}
+    } else {
+      document.documentElement.setAttribute('data-accent', choice);
+      try{ localStorage.setItem('viqs-accent', choice); } catch(e){}
+    }
+    applyAccentUI();
+  });
+});
+applyAccentUI();
 
 document.getElementById('nav-logout').addEventListener('click', ()=>{
   stopActualTimer();
